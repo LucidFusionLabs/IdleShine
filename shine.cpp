@@ -22,21 +22,8 @@
 
 namespace LFL {
 struct MyApp : public Application {
-  unordered_map<string, Shader> shader_map;
-
-  MyApp(int ac, const char* const* av) : Application(ac, av) {}
-  virtual ~MyApp();
-
-  void OnWindowInit(Window *W);
+  using Application::Application;
   void OnWindowStart(Window *W);
-  void OnWindowClosed(Window *W) { delete W; }
-
-  Shader *GetShader(const string &shader_name) { 
-    auto shader = shader_map.find(shader_name);
-    if (shader == shader_map.end()) return nullptr;
-    if (!shader->second.ID) Shader::CreateShaderToy(this, shader_name, FileContents(StrCat(shader_name, ".frag")), &shader->second);
-    return &shader->second;
-  }
 } *app;
 
 inline string   LS  (const char *n) { return app->GetLocalizedString(n); }
@@ -44,12 +31,30 @@ inline String16 LS16(const char *n) { return app->GetLocalizedString16(n); }
 
 struct MyView : public View {
   using View::View;
+  unordered_map<string, Shader> shader_map;
+  Shader *activeshader = &app->shaders->shader_default;
 
+  MyView(Window *R, const Box &B=Box()) : View(R, B) {
+    shader_map.insert(make_pair("warper",   Shader(app)));
+    shader_map.insert(make_pair("water",    Shader(app)));
+    shader_map.insert(make_pair("twistery", Shader(app)));
+    shader_map.insert(make_pair("fire",     Shader(app)));
+    shader_map.insert(make_pair("waves",    Shader(app)));
+    shader_map.insert(make_pair("emboss",   Shader(app)));
+    shader_map.insert(make_pair("stormy",   Shader(app)));
+    shader_map.insert(make_pair("alien",    Shader(app)));
+    shader_map.insert(make_pair("fractal",  Shader(app)));
+    shader_map.insert(make_pair("darkly",   Shader(app)));
+  }
+    
   int Frame(Window *W, unsigned clicks, int flag) {
-    float tex[4];
+    INFO("got Frame ", W->Box(), " ", clicks);
     GraphicsContext gc(W->GD());
+    gc.gd->ClearColor(Color::red);
     gc.gd->DisableBlend();
-    // gc.DrawTexturedBox(W->box, tex, 1);
+    gc.gd->UseShader(activeshader);
+    GraphicsContext::DrawTexturedBox1(gc.gd, W->Box());
+    gc.gd->UseShader(0);
 
     W->DrawDialogs();
     W->default_font->Draw(W->gd, StringPrintf("FPS = %.2f", app->focused->fps.FPS()), point(W->gl_w*.85, 0));
@@ -57,24 +62,23 @@ struct MyView : public View {
   }
 
   void ChangeShader(const string &shader_name) {
-    auto shader = app->GetShader(shader_name);
-    // activeshader = shader ? shader : &app->shaders->shader_default;
+    auto shader = GetShader(shader_name);
+    activeshader = shader ? shader : &app->shaders->shader_default;
+  }
+
+  Shader *GetShader(const string &shader_name) { 
+    auto shader = shader_map.find(shader_name);
+    if (shader == shader_map.end()) return nullptr;
+    if (!shader->second.ID) Shader::CreateShaderToy(app, shader_name, app->FileContents(StrCat(shader_name, ".frag")), &shader->second);
+    return &shader->second;
   }
 };
 
-MyApp::~MyApp() {}
-
-void MyApp::OnWindowInit(Window *W) {
-  // W->gl_w = app->new_win_width;
-  // W->gl_h = app->new_win_height;
-  W->caption = app->name;
-}
-
 void MyApp::OnWindowStart(Window *W) {
-  CHECK(W->gd->have_framebuffer);
   CHECK_EQ(0, W->NewView());
-  auto tw = W->ReplaceView(0, make_unique<MyView>(W));
-  W->frame_cb = bind(&MyView::Frame, tw, _1, _2, _3);
+  auto V = W->ReplaceView(0, make_unique<MyView>(W));
+  W->frame_cb = bind(&MyView::Frame, V, _1, _2, _3);
+  V->ChangeShader("waves");
 }
 
 }; // naemspace LFL
@@ -82,29 +86,24 @@ using namespace LFL;
 
 extern "C" LFApp *MyAppCreate(int argc, const char* const* argv) {
   FLAGS_enable_video = 1;
+  Application::LoadDefaultSettings(StringPairVec{
+    StringPair("send_crash_reports", "1"),
+    StringPair("write_log_file",     "0")
+  });
+  if (true || atoi(Application::GetSetting("write_log_file"))) {
+    FLAGS_logfile = "\x01";
+    FLAGS_loglevel = 7;
+  }
   app = make_unique<MyApp>(argc, argv).release();
   app->focused = app->framework->ConstructWindow(app).release();
   app->name = LS("app_name");
-  app->window_closed_cb = bind(&MyApp::OnWindowClosed, app, _1);
   app->window_start_cb = bind(&MyApp::OnWindowStart, app, _1);
-  app->window_init_cb = bind(&MyApp::OnWindowInit, app, _1);
-  app->window_init_cb(app->focused);
   return app;
 }
 
 extern "C" int MyAppMain(LFApp*) {
-  if (app->Create(__FILE__)) return -1;
+  if (app->Create(__FILE__, "com.lucidfusionlabs.IdleShine")) return -1;
   if (app->Init()) return -1;
-  app->shader_map.insert(make_pair("warper",   Shader(app)));
-  app->shader_map.insert(make_pair("water",    Shader(app)));
-  app->shader_map.insert(make_pair("twistery", Shader(app)));
-  app->shader_map.insert(make_pair("fire",     Shader(app)));
-  app->shader_map.insert(make_pair("waves",    Shader(app)));
-  app->shader_map.insert(make_pair("emboss",   Shader(app)));
-  app->shader_map.insert(make_pair("stormy",   Shader(app)));
-  app->shader_map.insert(make_pair("alien",    Shader(app)));
-  app->shader_map.insert(make_pair("fractal",  Shader(app)));
-  app->shader_map.insert(make_pair("darkly",   Shader(app)));
 
   app->StartNewWindow(app->focused);
   return app->Main();
