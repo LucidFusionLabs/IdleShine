@@ -48,16 +48,22 @@ struct MyView : public View {
   }
     
   int Frame(Window *W, unsigned clicks, int flag) {
-    INFO("got Frame ", W->Box(), " ", clicks);
+    Box draw_box = W->Box();
     GraphicsContext gc(W->GD());
     gc.gd->ClearColor(Color::red);
     gc.gd->DisableBlend();
-    gc.gd->UseShader(activeshader);
-    GraphicsContext::DrawTexturedBox1(gc.gd, W->Box());
+
+    float scale = activeshader->scale;
+    glShadertoyShader(gc.gd, activeshader);
+    activeshader->SetUniform1i("iChannelFlip", 1);
+    activeshader->SetUniform2f("iChannelScroll", 0, 0);
+    activeshader->SetUniform4f("iTargetBox", draw_box.x, draw_box.y,
+                               XY_or_Y(scale, draw_box.w), XY_or_Y(scale, draw_box.h));
+    GraphicsContext::DrawTexturedBox1(gc.gd, draw_box);
     gc.gd->UseShader(0);
 
     W->DrawDialogs();
-    W->default_font->Draw(W->gd, StringPrintf("FPS = %.2f", app->focused->fps.FPS()), point(W->gl_w*.85, 0));
+    W->default_font->Draw(W->gd, StringPrintf("FPS = %.2f", app->focused->fps.FPS()), point(0, 0));
     return 0;
   }
 
